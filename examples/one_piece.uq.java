@@ -15,25 +15,32 @@ import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.json.JSONObject;
 import uq.script.ScriptApi;
 import uq.script.ScriptSchema;
 import uq.script.UqScript;
 
 /**
- * one_piece.uq.java — Automated One Piece Manga Release Monitor & Native Notifier.
+ * one_piece.uq.java — Smart Weekly One Piece Manga Release Monitor & Native Notifier.
  *
- * Replaces external ntfy.sh dependency with direct on-device Android notifications:
- *   - Polls TCB Scans (https://tcbonepiecechapters.com/mangas/5/one-piece).
- *   - Detects the exact moment a new chapter releases.
- *   - Parses the chapter title and direct reading URL.
- *   - Issues a high-priority heads-up system notification with a PendingIntent:
- *     tapping the notification opens the chapter directly in your browser.
- *   - Celebratory haptic vibration and toast on release.
- *   - Persists state across device reboots and updates.
+ * Rules:
+ *   - Active Window: Thursday 00:00 through Saturday 23:59.
+ *   - Weekly Release Logic:
+ *     - Once Thursday begins, checks TCB Scans every 30 minutes until the new chapter drops.
+ *     - As soon as the chapter is released and notified, checking STOPS for the rest of
+ *       the week and sleeps until next Thursday.
+ *     - If Saturday ends (Sunday 00:00) with no release (e.g. Oda break week or holiday),
+ *       checking pauses and sleeps until next Thursday.
+ *   - Dormant Window: Sunday, Monday, Tuesday, Wednesday (zero battery / network polling).
+ *   - Native Android Notification:
+ *     - High priority heads-up notification with chapter title and click-to-read PendingIntent.
+ *     - Custom celebratory haptic vibration pattern and toast.
+ *   - Persistent State: Tracks target chapter, released week, and year across device reboots.
  */
 public class OnePiece extends UqScript {
 
@@ -47,10 +54,14 @@ public class OnePiece extends UqScript {
     private int targetChapter = 1199;
     private int checkIntervalMins = 30;
     private boolean vibrateOnRelease = true;
+    private String windowMode = "thu_to_sat"; // "thu_to_sat" or "everyday"
 
     // Runtime state
+    private int lastReleasedWeek = -1;
+    private int lastReleasedYear = -1;
     private long lastCheckTime = 0L;
     private String lastCheckedStatus = "Initialized";
+    private long lastDormantLogTime = 0L;
 
     @Override
     public ScriptSchema schema() {
@@ -58,7 +69,10 @@ public class OnePiece extends UqScript {
                 .addNumber("target_chapter", "Target Chapter to Monitor",
                         "The chapter number to monitor for release", 1199, 1000, 2500)
                 .addNumber("check_interval_mins", "Check Interval (Minutes)",
-                        "Polling frequency in minutes (default 30 mins)", 30, 5, 240)
+                        "Polling frequency in minutes during active window (default 30 mins)", 30, 5, 240)
+                .addChoice("window_mode", "Schedule Window",
+                        "When to monitor for releases (Thu-Sat recommended)", "thu_to_sat",
+                        new String[]{"thu_to_sat", "everyday"})
                 .addBoolean("vibrate_on_release", "Vibrate Phone on Release",
                         "Strong haptic pattern alert when a new chapter drops", true);
     }
@@ -73,11 +87,15 @@ public class OnePiece extends UqScript {
         targetChapter = b.getInt("target_chapter", targetChapter);
         checkIntervalMins = b.getInt("check_interval_mins", checkIntervalMins);
         vibrateOnRelease = b.getBoolean("vibrate_on_release", vibrateOnRelease);
+        String wm = b.getString("window_mode");
+        if (wm != null && wm.length() > 0) {
+            windowMode = wm.toLowerCase();
+        }
     }
 
     @Override
     public void main(ScriptApi api, Bundle args) throws Exception {
-        api.log("one_piece: starting One Piece Chapter Monitor daemon");
+        api.log("one_piece: starting Smart Weekly One Piece Chapter Monitor daemon");
         applyConfig(args);
 
         Context ctx = getContext(api);
@@ -86,53 +104,142 @@ public class OnePiece extends UqScript {
             return;
         }
 
-        // Initialize tracked chapter from persistent storage if available
-        initTargetChapter(api);
+        // Initialize tracked chapter and weekly state from persistent storage
+        initTrackerState(api);
 
-        api.log("one_piece: actively monitoring for Chapter " + targetChapter + " (every " + checkIntervalMins + "m)");
-        api.toast("🏴‍☠️ Monitoring for One Piece Chapter " + targetChapter);
+        api.log("one_piece: initialized target Chapter " + targetChapter + " [Window: " + windowMode + ", Interval: " + checkIntervalMins + "m]");
+        api.toast("🏴‍☠️ One Piece Monitor active (Target: " + targetChapter + ")");
 
         while (!api.stopRequested()) {
-            try {
-                checkForNewChapter(ctx, api);
-            } catch (Throwable t) {
-                api.log("one_piece: check failed: " + t.getMessage());
-                lastCheckedStatus = "Error: " + t.getMessage();
-            }
+            Calendar nowCal = Calendar.getInstance();
+            boolean isWindowActive = isMonitoringWindowActive(nowCal);
+            boolean alreadyReleasedThisWeek = isAlreadyReleasedThisWeek(nowCal);
 
-            // Interruptible countdown sleep
-            long waitMs = checkIntervalMins * 60 * 1000L;
-            long startSleep = System.currentTimeMillis();
-            while (!api.stopRequested() && (System.currentTimeMillis() - startSleep < waitMs)) {
+            if (isWindowActive && !alreadyReleasedThisWeek) {
+                // ACTIVE POLLING: Thursday through Saturday, target not yet released
                 try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ie) {
-                    break;
+                    checkForNewChapter(ctx, api, nowCal);
+                } catch (Throwable t) {
+                    api.log("one_piece: check failed: " + t.getMessage());
+                    lastCheckedStatus = "Error: " + t.getMessage();
                 }
+
+                // If just released, we won't poll again this week
+                if (isAlreadyReleasedThisWeek(nowCal)) {
+                    long untilThu = getMillisUntilNextThursday(nowCal);
+                    api.log("one_piece: 🎉 Chapter released! Checks paused until next Thursday (" + formatDuration(untilThu) + ").");
+                    sleepInterruptible(api, Math.min(3600000L, untilThu));
+                    continue;
+                }
+
+                // Normal interval sleep between checks
+                sleepInterruptible(api, checkIntervalMins * 60 * 1000L);
+
+            } else {
+                // DORMANT: Sunday–Wednesday OR already released this week
+                long untilThu = getMillisUntilNextThursday(nowCal);
+                long nowMs = System.currentTimeMillis();
+
+                // Periodic status log every 30 minutes when dormant
+                if (nowMs - lastDormantLogTime > 1800000L) {
+                    lastDormantLogTime = nowMs;
+                    String reason = alreadyReleasedThisWeek
+                            ? "This week's chapter already released."
+                            : "Outside release window (Sun-Wed or Break Week).";
+                    api.log("one_piece: [Dormant] " + reason + " Next active scan on Thursday 12:00 AM (in " + formatDuration(untilThu) + ").");
+
+                    ScriptApi.BUS.put("one_piece:status", "dormant");
+                    ScriptApi.BUS.put("one_piece:next_window_ms", Long.valueOf(nowMs + untilThu));
+                }
+
+                // Sleep in safe 10-minute slices to stay responsive and clock-synced
+                long sliceMs = Math.min(600000L, untilThu);
+                sleepInterruptible(api, sliceMs);
             }
         }
 
         api.log("one_piece: monitor daemon stopped");
     }
 
-    private void initTargetChapter(ScriptApi api) {
+    private boolean isMonitoringWindowActive(Calendar cal) {
+        if ("everyday".equals(windowMode)) return true;
+        int dow = cal.get(Calendar.DAY_OF_WEEK);
+        // Active: Thursday (5), Friday (6), Saturday (7)
+        return (dow == Calendar.THURSDAY || dow == Calendar.FRIDAY || dow == Calendar.SATURDAY);
+    }
+
+    private boolean isAlreadyReleasedThisWeek(Calendar cal) {
+        if ("everyday".equals(windowMode)) return false;
+        int currentWeek = cal.get(Calendar.WEEK_OF_YEAR);
+        int currentYear = cal.get(Calendar.YEAR);
+        return (lastReleasedWeek == currentWeek && lastReleasedYear == currentYear);
+    }
+
+    private long getMillisUntilNextThursday(Calendar now) {
+        Calendar target = (Calendar) now.clone();
+        target.set(Calendar.HOUR_OF_DAY, 0);
+        target.set(Calendar.MINUTE, 0);
+        target.set(Calendar.SECOND, 0);
+        target.set(Calendar.MILLISECOND, 0);
+
+        // Advance day by day until it's Thursday and strictly in the future
+        while (target.get(Calendar.DAY_OF_WEEK) != Calendar.THURSDAY || !target.after(now)) {
+            target.add(Calendar.DAY_OF_YEAR, 1);
+        }
+        return Math.max(60000L, target.getTimeInMillis() - now.getTimeInMillis());
+    }
+
+    private static String formatDuration(long ms) {
+        long hours = ms / 3600000L;
+        long mins = (ms % 3600000L) / 60000L;
+        long days = hours / 24L;
+        long remHours = hours % 24L;
+        if (days > 0) {
+            return days + "d " + remHours + "h";
+        }
+        return hours + "h " + mins + "m";
+    }
+
+    private void sleepInterruptible(ScriptApi api, long waitMs) {
+        long start = System.currentTimeMillis();
+        while (!api.stopRequested() && (System.currentTimeMillis() - start < waitMs)) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ie) {
+                break;
+            }
+        }
+    }
+
+    private void initTrackerState(ScriptApi api) {
         try {
-            // First check persistent script state
             File sf = new File(STATE_FILE);
             if (sf.exists()) {
                 String saved = api.read(STATE_FILE);
                 if (saved != null && !saved.trim().isEmpty()) {
-                    int lastSaved = Integer.parseInt(saved.trim());
-                    if (lastSaved >= 1000) {
-                        targetChapter = lastSaved + 1;
-                        api.log("one_piece: restored state from " + STATE_FILE + ", next target=" + targetChapter);
+                    saved = saved.trim();
+                    if (saved.startsWith("{")) {
+                        JSONObject json = new JSONObject(saved);
+                        int last = json.optInt("last_chapter", 1198);
+                        targetChapter = last + 1;
+                        lastReleasedWeek = json.optInt("released_week", -1);
+                        lastReleasedYear = json.optInt("released_year", -1);
+                        api.log("one_piece: restored JSON state target=" + targetChapter +
+                                " (lastReleasedWeek=" + lastReleasedWeek + ", year=" + lastReleasedYear + ")");
                         return;
+                    } else {
+                        int last = Integer.parseInt(saved);
+                        if (last >= 1000) {
+                            targetChapter = last + 1;
+                            api.log("one_piece: restored legacy state target=" + targetChapter);
+                            return;
+                        }
                     }
                 }
             }
         } catch (Throwable ignored) {}
 
-        // Fallback: check ubuntu22-fs root .last_chapter if readable
+        // Fallback: check legacy ubuntu22-fs root .last_chapter
         try {
             File legacy = new File("/data/data/com.termux/files/home/ubuntu22-fs/root/.last_chapter");
             if (legacy.exists() && legacy.canRead()) {
@@ -146,29 +253,37 @@ public class OnePiece extends UqScript {
                     if (last >= 1000) {
                         targetChapter = last + 1;
                         api.log("one_piece: imported legacy state from ubuntufs .last_chapter: " + targetChapter);
-                        saveLastChapter(api, last);
+                        saveTrackerState(api, last, -1, -1);
                         return;
                     }
                 }
             }
         } catch (Throwable ignored) {}
 
-        // Default: 1199
-        api.log("one_piece: using default target chapter " + targetChapter);
+        api.log("one_piece: initialized default target chapter " + targetChapter);
     }
 
-    private void saveLastChapter(ScriptApi api, int lastChapter) {
+    private void saveTrackerState(ScriptApi api, int lastChapter, int week, int year) {
         try {
-            api.write(STATE_FILE, String.valueOf(lastChapter));
+            File parent = new File(STATE_FILE).getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            JSONObject json = new JSONObject();
+            json.put("last_chapter", lastChapter);
+            json.put("released_week", week);
+            json.put("released_year", year);
+            json.put("updated_at", System.currentTimeMillis());
+            api.write(STATE_FILE, json.toString());
         } catch (Throwable t) {
-            api.log("one_piece: saveLastChapter failed: " + t);
+            api.log("one_piece: saveTrackerState failed: " + t);
         }
     }
 
-    private void checkForNewChapter(Context ctx, ScriptApi api) throws Exception {
+    private void checkForNewChapter(Context ctx, ScriptApi api, Calendar nowCal) throws Exception {
         lastCheckTime = System.currentTimeMillis();
         String timeStr = new SimpleDateFormat("hh:mm a", Locale.US).format(new Date(lastCheckTime));
-        api.log("one_piece: [" + timeStr + "] Fetching TCB Scans page to check Chapter " + targetChapter + "...");
+        api.log("one_piece: [" + timeStr + "] Fetching TCB Scans to check Chapter " + targetChapter + "...");
 
         String html = fetchHtml(MANGA_URL);
         if (html == null || html.isEmpty()) {
@@ -181,7 +296,7 @@ public class OnePiece extends UqScript {
         boolean isReleased = html.contains(chapterKey) || html.contains("Chapter " + targetChapter);
 
         if (isReleased) {
-            api.log("one_piece: 🚨 CHAPTER " + targetChapter + " IS OUT! Parsing details...");
+            api.log("one_piece: 🚨 CHAPTER " + targetChapter + " IS OUT! Extracting details...");
 
             // Extract direct chapter link and title
             String chapterUrl = extractChapterUrl(html, targetChapter);
@@ -190,27 +305,32 @@ public class OnePiece extends UqScript {
             // Post native Android heads-up notification with browser PendingIntent
             postChapterNotification(ctx, api, targetChapter, chapterTitle, chapterUrl);
 
+            // Record release week and year so checks pause until next Thursday
+            int currentWeek = nowCal.get(Calendar.WEEK_OF_YEAR);
+            int currentYear = nowCal.get(Calendar.YEAR);
+            lastReleasedWeek = currentWeek;
+            lastReleasedYear = currentYear;
+
             // Save state & advance to next chapter
-            saveLastChapter(api, targetChapter);
+            saveTrackerState(api, targetChapter, lastReleasedWeek, lastReleasedYear);
             targetChapter++;
             lastCheckedStatus = "Chapter " + (targetChapter - 1) + " released!";
 
             ScriptApi.BUS.put("one_piece:last_released", Integer.valueOf(targetChapter - 1));
             ScriptApi.BUS.put("one_piece:target_chapter", Integer.valueOf(targetChapter));
-            ScriptApi.BUS.put("one_piece:status", "released");
+            ScriptApi.BUS.put("one_piece:status", "released_for_week");
         } else {
             lastCheckedStatus = "Not yet released (checked at " + timeStr + ")";
-            api.log("one_piece: Chapter " + targetChapter + " not yet released. Sleeping for " + checkIntervalMins + "m.");
+            api.log("one_piece: Chapter " + targetChapter + " not yet out. Next check in " + checkIntervalMins + "m.");
 
             ScriptApi.BUS.put("one_piece:target_chapter", Integer.valueOf(targetChapter));
             ScriptApi.BUS.put("one_piece:last_checked", Long.valueOf(lastCheckTime));
-            ScriptApi.BUS.put("one_piece:status", "waiting");
+            ScriptApi.BUS.put("one_piece:status", "monitoring");
         }
     }
 
     private String extractChapterUrl(String html, int chapter) {
         try {
-            // Pattern: href="(/chapters/[0-9]+/one-piece-chapter-XXXX)"
             Pattern p = Pattern.compile("href=\"(/chapters/[0-9]+/one-piece-chapter-" + chapter + "[^\"]*)\"");
             Matcher m = p.matcher(html);
             if (m.find()) {
@@ -226,7 +346,6 @@ public class OnePiece extends UqScript {
 
     private String extractChapterTitle(String html, int chapter) {
         try {
-            // Look for card block containing chapter-XXXX and text-gray-500 title
             String needle = "chapter-" + chapter;
             int idx = html.indexOf(needle);
             if (idx != -1) {
@@ -248,7 +367,6 @@ public class OnePiece extends UqScript {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
 
-            // Notification Channel for Android 8.0+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 NotificationChannel channel = new NotificationChannel(
                         NOTIF_CHANNEL_ID,
@@ -261,7 +379,6 @@ public class OnePiece extends UqScript {
                 nm.createNotificationChannel(channel);
             }
 
-            // PendingIntent to launch the browser directly to the chapter URL
             Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(chapterUrl));
             browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -302,7 +419,6 @@ public class OnePiece extends UqScript {
             api.toast("🏴‍☠️ One Piece Chapter " + chapter + " is OUT!");
         } catch (Throwable t) {
             api.log("one_piece: native notification failed: " + t);
-            // Fallback to built-in ScriptApi notify
             api.notify(NOTIF_ID, "🏴‍☠️ One Piece Chapter " + chapter + " is OUT!",
                     chapterTitle + " • Tap to read on TCB Scans");
         }
