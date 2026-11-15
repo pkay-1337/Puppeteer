@@ -391,6 +391,8 @@ public class Blocker extends UqScript {
         if (isOverlayShowing && pkg.equals(currentBlockedPkg)) return;
         isOverlayShowing = true;
         currentBlockedPkg = pkg;
+        ScriptApi.BUS.put("blocker:overlay_active:" + pkg, Boolean.TRUE);
+        ScriptApi.BUS.put("ui:top_overlay_time", Long.valueOf(System.currentTimeMillis()));
 
         mainHandler.post(new Runnable() {
             public void run() {
@@ -427,6 +429,9 @@ public class Blocker extends UqScript {
     private void hideBlocker(final ScriptApi api) {
         if (!isOverlayShowing) return;
         isOverlayShowing = false;
+        if (currentBlockedPkg != null) {
+            ScriptApi.BUS.put("blocker:overlay_active:" + currentBlockedPkg, Boolean.FALSE);
+        }
         currentBlockedPkg = null;
 
         mainHandler.post(new Runnable() {

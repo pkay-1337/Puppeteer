@@ -147,10 +147,11 @@ public class FirewallBall extends UqScript {
         initBallView(ctx);
 
         String lastKnownActivePkg = null;
+        long lastTopOverlayTime = 0L;
 
         while (!api.stopRequested()) {
             try {
-                Thread.sleep(600); // Check foreground app every 600ms
+                Thread.sleep(400); // Check foreground app every 400ms
             } catch (InterruptedException ie) {
                 break;
             }
@@ -178,7 +179,8 @@ public class FirewallBall extends UqScript {
                 updateBallVisibility(false, null, false);
             } else {
                 // Inside a monitored app (e.g. Brave, LinkedIn, etc.)
-                if (!fgPkg.equals(currentMonitoredPkg)) {
+                boolean appChanged = !fgPkg.equals(currentMonitoredPkg);
+                if (appChanged) {
                     currentMonitoredPkg = fgPkg;
                     if (resetOnExit) {
                         if (defaultBlockedApps.contains(fgPkg)) {
@@ -192,6 +194,15 @@ public class FirewallBall extends UqScript {
 
                 boolean isBlocked = currentlyBlockedPkgs.contains(fgPkg);
                 updateBallVisibility(true, fgPkg, isBlocked);
+
+                // Elevate ball to top whenever an overlay opens (e.g. blocker or intent session)
+                Long topTime = (Long) ScriptApi.BUS.get("ui:top_overlay_time");
+                if (topTime != null && topTime.longValue() > lastTopOverlayTime) {
+                    lastTopOverlayTime = topTime.longValue();
+                    bringBallToFront();
+                } else if (appChanged) {
+                    bringBallToFront();
+                }
             }
         }
 
@@ -202,7 +213,16 @@ public class FirewallBall extends UqScript {
 
     private boolean isMonitoredApp(String pkg) {
         if (pkg == null || pkg.isEmpty()) return false;
-        return defaultBlockedApps.contains(pkg) || defaultAllowedApps.contains(pkg);
+        if (defaultBlockedApps.contains(pkg) || defaultAllowedApps.contains(pkg)) {
+            return true;
+        }
+        // Also show ball if blocker or intent session is actively showing an overlay for this app
+        if (Boolean.TRUE.equals(ScriptApi.BUS.get("intent:overlay_active:" + pkg)) ||
+            Boolean.TRUE.equals(ScriptApi.BUS.get("blocker:overlay_active:" + pkg)) ||
+            Boolean.TRUE.equals(ScriptApi.BUS.get("blocker:is_exceeded:" + pkg))) {
+            return true;
+        }
+        return false;
     }
 
     private synchronized void syncFirewall() {
@@ -321,6 +341,8 @@ public class FirewallBall extends UqScript {
         if (wasBlocked) {
             // Unblock (turn green)
             currentlyBlockedPkgs.remove(pkg);
+            defaultBlockedApps.remove(pkg);
+            defaultAllowedApps.add(pkg);
             syncFirewall();
             updateBallVisuals(false);
             if (api != null) {
@@ -331,6 +353,8 @@ public class FirewallBall extends UqScript {
         } else {
             // Block (turn red)
             currentlyBlockedPkgs.add(pkg);
+            defaultBlockedApps.add(pkg);
+            defaultAllowedApps.remove(pkg);
             syncFirewall();
             updateBallVisuals(true);
             if (api != null) {
@@ -366,6 +390,7 @@ public class FirewallBall extends UqScript {
 
     private void updateBallVisibility(final boolean visible, final String pkg, final boolean isBlocked) {
         if (isBallVisible == visible && !visible) return;
+        final boolean justBecameVisible = (!isBallVisible && visible);
         isBallVisible = visible;
 
         mainHandler.post(new Runnable() {
@@ -375,11 +400,38 @@ public class FirewallBall extends UqScript {
                         ballView.setVisibility(visible ? View.VISIBLE : View.GONE);
                         if (visible) {
                             updateBallVisuals(isBlocked);
+                            if (justBecameVisible) {
+                                bringBallToFrontInternal();
+                            }
                         }
                     }
                 } catch (Throwable ignored) {}
             }
         });
+    }
+
+    private void bringBallToFront() {
+        mainHandler.post(new Runnable() {
+            public void run() {
+                bringBallToFrontInternal();
+            }
+        });
+    }
+
+    private void bringBallToFrontInternal() {
+        try {
+            if (wm == null || ballView == null || !isBallVisible) return;
+            if (ballView.getWindowToken() != null) {
+                try {
+                    wm.removeViewImmediate(ballView);
+                } catch (Throwable ignored) {}
+            }
+            try {
+                wm.addView(ballView, ballLp);
+            } catch (Throwable t) {
+                try { wm.updateViewLayout(ballView, ballLp); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
     }
 
     private void removeBall() {

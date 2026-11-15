@@ -241,6 +241,9 @@ public class IntentSession extends UqScript {
     private void setOverlayActiveBus(String pkg, boolean active) {
         if (pkg != null) {
             ScriptApi.BUS.put("intent:overlay_active:" + pkg, Boolean.valueOf(active));
+            if (active) {
+                ScriptApi.BUS.put("ui:top_overlay_time", Long.valueOf(System.currentTimeMillis()));
+            }
         }
     }
 
