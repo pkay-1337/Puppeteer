@@ -124,6 +124,8 @@ public class BedtimeFirewall extends UqScript {
             // 1. Bedtime Window (10:00 PM to 8:00 AM)
             if (inBedtimeWindow) {
                 hideWarning();
+                ScriptApi.BUS.put("bedtime:active", Boolean.TRUE);
+                ScriptApi.BUS.put("bedtime:wake_time", formatTime(wakeHour, wakeMinute));
 
                 if (!wasBedtimeActive || !api.isInternetBlocked()) {
                     wasBedtimeActive = true;
@@ -134,6 +136,7 @@ public class BedtimeFirewall extends UqScript {
                 }
             } else {
                 // Outside Bedtime Window (8:00 AM to 10:00 PM)
+                ScriptApi.BUS.put("bedtime:active", Boolean.FALSE);
                 if (wasBedtimeActive) {
                     wasBedtimeActive = false;
                     api.restoreInternet();
@@ -358,5 +361,6 @@ public class BedtimeFirewall extends UqScript {
     @Override
     public void onStop() {
         hideWarning();
+        ScriptApi.BUS.put("bedtime:active", Boolean.FALSE);
     }
 }

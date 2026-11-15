@@ -192,7 +192,7 @@ public class FirewallBall extends UqScript {
                     }
                 }
 
-                boolean isBlocked = currentlyBlockedPkgs.contains(fgPkg);
+                boolean isBlocked = currentlyBlockedPkgs.contains(fgPkg) || isBedtimeActive();
                 updateBallVisibility(true, fgPkg, isBlocked);
 
                 // Elevate ball to top whenever an overlay opens (e.g. blocker or intent session)
@@ -207,7 +207,9 @@ public class FirewallBall extends UqScript {
         }
 
         removeBall();
-        api.restoreInternet();
+        if (!isBedtimeActive()) {
+            api.restoreInternet();
+        }
         api.log("firewall_ball: stopped");
     }
 
@@ -225,8 +227,16 @@ public class FirewallBall extends UqScript {
         return false;
     }
 
+    private boolean isBedtimeActive() {
+        return Boolean.TRUE.equals(ScriptApi.BUS.get("bedtime:active"));
+    }
+
     private synchronized void syncFirewall() {
         if (api == null) return;
+        if (isBedtimeActive()) {
+            api.log("firewall_ball: Bedtime Firewall active, keeping global internet blackhole");
+            return;
+        }
         try {
             if (currentlyBlockedPkgs.isEmpty()) {
                 api.restoreInternet();
@@ -336,9 +346,22 @@ public class FirewallBall extends UqScript {
         final String pkg = currentMonitoredPkg;
         final String label = (api != null) ? api.appLabel(pkg) : pkg;
 
-        boolean wasBlocked = currentlyBlockedPkgs.contains(pkg);
+        boolean wasBlocked = currentlyBlockedPkgs.contains(pkg) || isBedtimeActive();
 
         if (wasBlocked) {
+            // Check if Bedtime Firewall is active -> STRICTLY FORBID unblocking!
+            if (isBedtimeActive()) {
+                String wakeTime = (String) ScriptApi.BUS.get("bedtime:wake_time");
+                String wakeMsg = (wakeTime != null && !wakeTime.isEmpty()) ? " until " + wakeTime : "";
+                if (api != null) {
+                    api.vibrate(500); // Strong warning buzz
+                    api.toast("🌙 Bedtime Firewall Active: Internet locked" + wakeMsg);
+                    api.log("firewall_ball: unblock denied for " + pkg + " because Bedtime Firewall is active");
+                }
+                updateBallVisuals(true);
+                return;
+            }
+
             // Unblock (turn green)
             currentlyBlockedPkgs.remove(pkg);
             defaultBlockedApps.remove(pkg);
