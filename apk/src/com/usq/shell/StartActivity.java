@@ -342,7 +342,7 @@ public class StartActivity extends Activity {
         card.addView(t2);
 
         TextView code = new TextView(this);
-        code.setText("usq buildpush ~/uq-shell/examples/hello.uq.java");
+        code.setText("puppet buildpush ~/Puppeteer/examples/blocker.uq.java");
         code.setTextSize(12);
         code.setTextColor(0xFF38BDF8); // Sky blue
         code.setTypeface(Typeface.MONOSPACE);

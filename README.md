@@ -52,11 +52,11 @@ A lightweight, high-performance Android automation system and mindful focus engi
 ## Project Structure
 
 ```
-uq-shell/
+Puppeteer/
 ├── README.md                      ← Master documentation
+├── REQUIREMENTS.md                ← Prerequisites, environment & permissions guide
 ├── apk/                           ← Host application source code
 │   ├── AndroidManifest.xml        ← Permissions, services, receivers
-│   ├── uq-shell.apk               ← Pre-compiled, signed host APK (93 KB)
 │   ├── build_all.sh               ← Termux automated build pipeline (javac + dx + aapt + apksigner)
 │   └── src/
 │       ├── com/usq/shell/
@@ -76,16 +76,20 @@ uq-shell/
 │   ├── bedtime_firewall.uq.java   ← Bedtime internet blocker
 │   ├── volume_notif.uq.java       ← Volume dialog
 │   └── usage_report.uq.java       ← 24-hour analytics report
-└── release/                       ← Distributable assets
-    ├── UQShell-v0.7.0.apk         ← Production signed APK
-    ├── setup_permissions.sh       ← One-click ADB permission grant script
-    └── dex/                       ← Pre-compiled .dex binaries for all scripts
-        ├── blocker.dex
-        ├── intent_session.dex
-        ├── grayscale.dex
-        ├── firewall_ball.dex
-        ├── bedtime.dex
-        └── volnotif.dex
+├── release/                       ← Distributable assets
+│   ├── Puppeteer-v0.7.0.apk       ← Production signed APK
+│   ├── setup_termux.sh            ← Automated Termux toolchain setup
+│   ├── setup_permissions.sh       ← One-click ADB permission grant script
+│   └── dex/                       ← Pre-compiled .dex binaries for all scripts
+│       ├── blocker.dex
+│       ├── intent_session.dex
+│       ├── grayscale.dex
+│       ├── firewall_ball.dex
+│       ├── bedtime.dex
+│       └── volnotif.dex
+└── tools/                         ← Control scripts
+    ├── puppet                     ← Termux CLI control tool
+    └── setup_termux.sh            ← Automated setup script
 ```
 
 ---

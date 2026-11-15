@@ -31,6 +31,8 @@ echo "[4/6] Installing 'puppet' CLI to $PREFIX/bin/puppet..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/puppet" ]; then
   cp "$SCRIPT_DIR/puppet" "$PREFIX/bin/puppet"
+elif [ -f "$HOME/Puppeteer/tools/puppet" ]; then
+  cp "$HOME/Puppeteer/tools/puppet" "$PREFIX/bin/puppet"
 elif [ -f "$HOME/uq-shell/tools/puppet" ]; then
   cp "$HOME/uq-shell/tools/puppet" "$PREFIX/bin/puppet"
 fi
