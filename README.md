@@ -1,4 +1,6 @@
-# 🎭 Puppeteer — Personal Android Automation & Mindful Focus Engine
+# 🎭 Puppeteer — Personal Android Automation Engine
+
+VIBECODED
 
 A lightweight, high-performance Android automation system and mindful focus engine designed for Android 13 / MIUI 14 (Redmi Note 10 Pro), driven via the `puppet` CLI tool in Termux and SSH.
 
