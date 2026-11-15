@@ -533,8 +533,57 @@ public class JournalEnforcer extends UqScript {
         info.setText(windowText);
         info.setTextSize(11);
         info.setTextColor(0xFFF87171); // Warning red accent
-        info.setPadding(0, dp(12, ctx), 0, dp(16, ctx));
+        info.setPadding(0, dp(12, ctx), 0, dp(14, ctx));
         card.addView(info);
+
+        // Reflection Prompts Box
+        LinearLayout promptBox = new LinearLayout(ctx);
+        promptBox.setOrientation(LinearLayout.VERTICAL);
+        int pbPad = dp(14, ctx);
+        promptBox.setPadding(pbPad, pbPad, pbPad, pbPad);
+
+        GradientDrawable promptBg = new GradientDrawable();
+        promptBg.setColor(isMorning ? 0xFF191814 : 0xFF171420);
+        promptBg.setCornerRadius(dp(12, ctx));
+        promptBg.setStroke(dp(1, ctx), isMorning ? 0xFF3D3214 : 0xFF2F2445);
+        promptBox.setBackground(promptBg);
+
+        TextView promptHeader = new TextView(ctx);
+        promptHeader.setText(isMorning ? "💡 MORNING PROMPTS & FOCUS" : "💡 EVENING REFLECTION PROMPTS");
+        promptHeader.setTextSize(11);
+        promptHeader.setTextColor(isMorning ? 0xFFFFC107 : 0xFFC084FC);
+        promptHeader.setTypeface(Typeface.DEFAULT_BOLD);
+        promptHeader.setPadding(0, 0, 0, dp(8, ctx));
+        promptBox.addView(promptHeader);
+
+        String[] prompts = isMorning ? new String[] {
+            "• How are you feeling right now? (Energy, mood, mindset)",
+            "• What is your single most important focus or win for today?",
+            "• 🎧 Listen to yesterday night's journal in the app for context.",
+            "• What intentional energy do you want to bring today?"
+        } : new String[] {
+            "• How did today go? What went well or brought you satisfaction?",
+            "• What was challenging, distracting, or left unfinished?",
+            "• What is the main priority you'd like to tackle tomorrow?",
+            "• Unload lingering thoughts now so you can sleep with clarity."
+        };
+
+        for (int i = 0; i < prompts.length; i++) {
+            TextView pTv = new TextView(ctx);
+            pTv.setText(prompts[i]);
+            pTv.setTextSize(12);
+            pTv.setTextColor(0xFFCBD5E1);
+            pTv.setLineSpacing(dp(2, ctx), 1.18f);
+            if (i > 0) {
+                pTv.setPadding(0, dp(6, ctx), 0, 0);
+            }
+            promptBox.addView(pTv);
+        }
+
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pbLp.setMargins(0, 0, 0, dp(16, ctx));
+        card.addView(promptBox, pbLp);
 
         // Primary Action: Open Journal
         Button openBtn = new Button(ctx);
