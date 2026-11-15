@@ -604,7 +604,7 @@ public class IntentSession extends UqScript {
                             PixelFormat.TRANSLUCENT
                     );
                     hudLp.gravity = Gravity.TOP | Gravity.START;
-                    hudLp.x = dm.widthPixels / 2 - dp(85, ctx);
+                    hudLp.x = Math.max(dp(12, ctx), dm.widthPixels / 2 - dp(130, ctx));
                     hudLp.y = dp(28, ctx); // Near top status bar
 
                     hudPillView = new FrameLayout(ctx);
@@ -615,7 +615,7 @@ public class IntentSession extends UqScript {
                     pBg.setCornerRadius(dp(17, ctx));
                     pBg.setStroke(dp(1.5f, ctx), 0xFF38BDF8); // Cyan border
                     hudPillView.setBackground(pBg);
-                    hudPillView.setPadding(dp(12, ctx), dp(4, ctx), dp(12, ctx), dp(4, ctx));
+                    hudPillView.setPadding(dp(14, ctx), dp(4, ctx), dp(14, ctx), dp(4, ctx));
 
                     hudText = new TextView(ctx);
                     hudText.setText("🎯 Focus · ⏳ 05:00");
@@ -623,6 +623,9 @@ public class IntentSession extends UqScript {
                     hudText.setTextColor(0xFFF8FAFC);
                     hudText.setTypeface(Typeface.DEFAULT_BOLD);
                     hudText.setGravity(Gravity.CENTER);
+                    hudText.setSingleLine(true);
+                    hudText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    hudText.setMaxWidth(dp(300, ctx));
                     hudPillView.addView(hudText);
 
                     // Drag listener + Tap for remaining balance
@@ -688,7 +691,7 @@ public class IntentSession extends UqScript {
                     if (hudPillView != null && hudText != null) {
                         hudPillView.setVisibility(visible ? View.VISIBLE : View.GONE);
                         if (visible) {
-                            String truncatedIntent = (intent.length() > 14) ? intent.substring(0, 13) + "…" : intent;
+                            String truncatedIntent = (intent.length() > 28) ? intent.substring(0, 27) + "…" : intent;
                             hudText.setText("🎯 " + truncatedIntent + " · ⏳ " + timeStr);
                         }
                     }
