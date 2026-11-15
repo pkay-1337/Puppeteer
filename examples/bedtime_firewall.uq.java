@@ -51,6 +51,13 @@ public class BedtimeFirewall extends UqScript {
     private WindowManager wm;
     private View activeWarningView;
     private volatile boolean isWarningShowing = false;
+    private TextView warningBadgeTv;
+    private Button warningBtnOk;
+    private boolean warningAcknowledged = false;
+    private int lastWarningVibeDay = -1;
+    private int lastWarningNotifMin = -1;
+    private static final int NOTIF_WARNING_ID = 1099;
+    private ScriptApi savedApi;
 
     private View activeLockdownView;
     private volatile boolean isLockdownShowing = false;
@@ -65,7 +72,6 @@ public class BedtimeFirewall extends UqScript {
     private boolean vibrateWarning = true;
 
     // Daily state
-    private int lastWarningDay = -1;
     private boolean wasBedtimeActive = false;
     private String lastForegroundPkg = null;
 
@@ -106,6 +112,7 @@ public class BedtimeFirewall extends UqScript {
 
     @Override
     public void main(ScriptApi api, Bundle args) throws Exception {
+        savedApi = api;
         api.log("bedtime_firewall: starting Bedtime Internet & Phone Blocker daemon");
         applyConfig(args);
 
@@ -147,6 +154,11 @@ public class BedtimeFirewall extends UqScript {
             // 1. Bedtime Window (10:00 PM to 8:00 AM)
             if (inBedtimeWindow) {
                 hideWarning();
+                if (lastWarningNotifMin != -1) {
+                    api.cancelNotify(NOTIF_WARNING_ID);
+                    lastWarningNotifMin = -1;
+                }
+                warningAcknowledged = false;
                 ScriptApi.BUS.put("bedtime:active", Boolean.TRUE);
                 ScriptApi.BUS.put("bedtime:wake_time", formatTime(wakeHour, wakeMinute));
 
@@ -194,25 +206,50 @@ public class BedtimeFirewall extends UqScript {
 
                 // 2. Advance Warning Window (9:45 PM to 10:00 PM)
                 if (inWarningWindow) {
-                    if (lastWarningDay != currentDay) {
-                        lastWarningDay = currentDay;
-                        int minsRemaining = bedtimeMins - curMinsOfDay;
-                        if (minsRemaining < 0) minsRemaining += 1440;
-                        showWarning(ctx, api, minsRemaining, bedtimeHour, bedtimeMinute);
-                        if (vibrateWarning) {
-                            api.vibrate(800);
+                    int minsRemaining = bedtimeMins - curMinsOfDay;
+                    if (minsRemaining < 0) minsRemaining += 1440;
+
+                    // Keep a persistent heads-up/lockscreen notification during countdown
+                    if (minsRemaining != lastWarningNotifMin) {
+                        lastWarningNotifMin = minsRemaining;
+                        api.notify(NOTIF_WARNING_ID,
+                                "🌙 Bedtime in " + minsRemaining + "m (" + formatTime(bedtimeHour, bedtimeMinute) + ")",
+                                "Internet & device will lock at " + formatTime(bedtimeHour, bedtimeMinute) + ". Wrap up now.");
+                    }
+
+                    if (!warningAcknowledged) {
+                        // If screen is on, ensure the overlay is displayed with current countdown
+                        if (isScreenOn(ctx)) {
+                            showWarning(ctx, api, minsRemaining, bedtimeHour, bedtimeMinute);
+                            if (lastWarningVibeDay != currentDay) {
+                                lastWarningVibeDay = currentDay;
+                                if (vibrateWarning) {
+                                    api.vibrate(800);
+                                }
+                                api.toast("⚠️ Bedtime notice: Internet will be blocked in " + minsRemaining + " minutes!");
+                                api.log("bedtime_firewall: bedtime warning displayed (" + minsRemaining + "m until cutoff)");
+                            }
                         }
-                        api.toast("⚠️ Bedtime notice: Internet will be blocked in " + minsRemaining + " minutes!");
-                        api.log("bedtime_firewall: 15-minute bedtime warning displayed (" + minsRemaining + "m until cutoff)");
+                    } else {
+                        hideWarning();
                     }
                 } else {
                     hideWarning();
+                    if (lastWarningNotifMin != -1) {
+                        api.cancelNotify(NOTIF_WARNING_ID);
+                        lastWarningNotifMin = -1;
+                    }
+                    warningAcknowledged = false;
                 }
             }
         }
 
         hideWarning();
         hideLockdown();
+        if (lastWarningNotifMin != -1) {
+            api.cancelNotify(NOTIF_WARNING_ID);
+            lastWarningNotifMin = -1;
+        }
         ScriptApi.BUS.put("bedtime:active", Boolean.FALSE);
         api.log("bedtime_firewall: daemon stopped");
     }
@@ -451,7 +488,10 @@ public class BedtimeFirewall extends UqScript {
 
     private void showWarning(final Context ctx, final ScriptApi api, final int minsLeft,
                              final int bHour, final int bMin) {
-        if (isWarningShowing) return;
+        if (isWarningShowing) {
+            updateWarningCountdown(minsLeft, bHour, bMin);
+            return;
+        }
         isWarningShowing = true;
 
         mainHandler.post(new Runnable() {
@@ -471,7 +511,9 @@ public class BedtimeFirewall extends UqScript {
                             WindowManager.LayoutParams.MATCH_PARENT,
                             WindowManager.LayoutParams.WRAP_CONTENT,
                             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                                    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
                             PixelFormat.TRANSLUCENT
                     );
                     lp.gravity = Gravity.CENTER;
@@ -485,8 +527,23 @@ public class BedtimeFirewall extends UqScript {
         });
     }
 
+    private void updateWarningCountdown(final int minsLeft, final int bHour, final int bMin) {
+        mainHandler.post(new Runnable() {
+            public void run() {
+                try {
+                    if (warningBadgeTv != null) {
+                        warningBadgeTv.setText("Internet cuts off in " + minsLeft + " minutes (at " + formatTime(bHour, bMin) + ")");
+                    }
+                    if (warningBtnOk != null) {
+                        warningBtnOk.setText("✓ Understood — I'll Wrap Up (" + minsLeft + "m left)");
+                    }
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
     private void hideWarning() {
-        if (!isWarningShowing) return;
+        if (!isWarningShowing && activeWarningView == null) return;
         isWarningShowing = false;
 
         mainHandler.post(new Runnable() {
@@ -496,6 +553,8 @@ public class BedtimeFirewall extends UqScript {
                         wm.removeView(activeWarningView);
                         activeWarningView = null;
                     }
+                    warningBadgeTv = null;
+                    warningBtnOk = null;
                 } catch (Throwable ignored) {}
             }
         });
@@ -548,6 +607,7 @@ public class BedtimeFirewall extends UqScript {
         badgeTv.setGravity(Gravity.CENTER);
         badgeTv.setPadding(0, dp(4, ctx), 0, dp(12, ctx));
         card.addView(badgeTv);
+        warningBadgeTv = badgeTv;
 
         // Explanatory message
         TextView msgTv = new TextView(ctx);
@@ -574,15 +634,17 @@ public class BedtimeFirewall extends UqScript {
 
         btnOk.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                warningAcknowledged = true;
                 hideWarning();
                 if (api != null) {
-                    api.toast("👍 " + minsLeft + " minutes remaining until bedtime firewall.");
+                    api.toast("👍 Understood — wrapping up before bedtime.");
                 }
             }
         });
 
         card.addView(btnOk, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        warningBtnOk = btnOk;
 
         outer.addView(card, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -659,6 +721,9 @@ public class BedtimeFirewall extends UqScript {
     public void onStop() {
         hideWarning();
         hideLockdown();
+        if (savedApi != null) {
+            try { savedApi.cancelNotify(NOTIF_WARNING_ID); } catch (Throwable ignored) {}
+        }
         ScriptApi.BUS.put("bedtime:active", Boolean.FALSE);
     }
 }

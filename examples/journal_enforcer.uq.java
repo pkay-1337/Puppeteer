@@ -86,6 +86,7 @@ public class JournalEnforcer extends UqScript {
     private long emergencyGraceExpiresAt = 0L;
     private boolean wasScreenOff = true;
     private String persistentForegroundPkg = null;
+    private long lastStatusLogTime = 0L;
 
     @Override
     public ScriptSchema schema() {
@@ -123,6 +124,7 @@ public class JournalEnforcer extends UqScript {
         eveningStartHour = b.getInt("evening_start_hour", eveningStartHour);
         eveningEndHour = b.getInt("evening_end_hour", eveningEndHour);
         eveningEndMinute = b.getInt("evening_end_minute", eveningEndMinute);
+        earlyBufferHours = b.getInt("early_buffer_hours", earlyBufferHours);
         emergencyGraceMins = b.getInt("emergency_grace_mins", emergencyGraceMins);
         maxEmergencyPasses = b.getInt("max_emergency_passes", maxEmergencyPasses);
         autoLaunch = b.getBoolean("auto_launch", autoLaunch);
@@ -213,6 +215,11 @@ public class JournalEnforcer extends UqScript {
             ScriptApi.BUS.put("journal_gate:active", Boolean.valueOf(!isSatisfied));
             ScriptApi.BUS.put("journal_gate:window", (currentWindow == WINDOW_MORNING) ? "morning" : "evening");
             ScriptApi.BUS.put("journal_gate:satisfied", Boolean.valueOf(isSatisfied));
+
+            if (nowMs - lastStatusLogTime > 10000L) {
+                lastStatusLogTime = nowMs;
+                api.log("journal_enforcer: status inWindow=" + getWindowLabel(currentWindow) + " satisfied=" + isSatisfied + " fg=" + persistentForegroundPkg);
+            }
 
             if (isSatisfied) {
                 hideOverlay(api);
