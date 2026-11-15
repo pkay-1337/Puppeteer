@@ -1,0 +1,12 @@
+# Build output and intermediate bytecode
+apk/build/
+*.idsig
+*.class
+
+# Logs & temporary files
+*.log
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db

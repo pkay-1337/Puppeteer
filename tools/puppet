@@ -1,0 +1,165 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ==============================================================================
+# puppet — Puppeteer Android Control CLI (Termux side)
+# Communicates with Puppeteer's control plane on 127.0.0.1:7823
+# ==============================================================================
+BASE=http://127.0.0.1:7823
+UQD=$HOME/.uq
+APIJ=$UQD/api.jar
+
+# Locate android.jar
+AJ="$HOME/usq/android.jar"
+for p in "$HOME/usq/android.jar" "$UQD/android.jar" "$PREFIX/share/java/android.jar"; do
+  if [ -f "$p" ]; then AJ="$p"; break; fi
+done
+
+# Locate dx.jar
+DXJ="$HOME/dxx/data/data/com.termux/files/usr/share/dex/dx.jar"
+for p in "$HOME/dxx/data/data/com.termux/files/usr/share/dex/dx.jar" "$PREFIX/share/dex/dx.jar" "$UQD/dx.jar"; do
+  if [ -f "$p" ]; then DXJ="$p"; break; fi
+done
+
+usage() {
+  cat <<EOF
+🎭 puppet — Puppeteer Android Control
+  puppet status | list
+  puppet push FILE.dex [--id X] [--entry CLS] [--name N] [--resident]
+      [--autostart] [--desc TXT] [--args JSON] [--cron schedId:cronOrMs]...
+  puppet buildpush FILE.java [--id X] [--entry CLS] [--name N] [--resident]
+      [--autostart] [--desc TXT] [--args JSON] [--cron schedId:cronOrMs]...
+      [--no-start]      compile in Termux (javac+dx), push, run
+  puppet start ID [--args JSON] | stop ID | remove ID
+  puppet logs ID [tail] | api | docs [PAGE]
+EOF
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  status|list)
+    curl -s --max-time 5 "$BASE/$cmd"
+    echo
+    ;;
+  start|stop|remove)
+    id="$1"; [ -z "$id" ] && { echo "usage: puppet $cmd ID"; exit 2; }
+    curl -s --max-time 15 -X POST "$BASE/$cmd?id=$id"
+    echo
+    ;;
+  logs)
+    id="$1"; [ -z "$id" ] && { echo "usage: puppet logs ID [tail]"; exit 2; }
+    curl -s --max-time 10 "$BASE/logs?id=$id&tail=${2:-100}"
+    ;;
+  api)
+    mkdir -p "$UQD"
+    curl -s --max-time 10 "$BASE/api.jar" -o "$APIJ" && echo "api.jar -> $APIJ"
+    ;;
+  docs)
+    curl -s --max-time 10 "$BASE/docs/${1:-index}"
+    echo
+    ;;
+  push)
+    src=""; id=""; entry=""; name=""; resident=0; autostart=0; desc=""; args=""; crons=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --id) id="$2"; shift 2;;
+        --entry) entry="$2"; shift 2;;
+        --name) name="$2"; shift 2;;
+        --resident) resident=1; shift;;
+        --autostart) autostart=1; shift;;
+        --desc) desc="$2"; shift 2;;
+        --args) args="$2"; shift 2;;
+        --cron) crons="$crons|$2"; shift 2;;
+        *) src="$1"; shift;;
+      esac
+    done
+    if [ -z "$src" ] || [ ! -f "$src" ]; then echo "usage: puppet push FILE.dex ..."; exit 2; fi
+    [ -z "$id" ] && { id=$(basename "$src"); id="${id%.dex}"; }
+    [ -z "$entry" ] && { echo "push needs --entry CLS"; exit 2; }
+    H=(-H "Content-Type: application/octet-stream" -H "X-Uq-Id: $id" -H "X-Uq-Entry: $entry"
+       -H "X-Uq-Resident: $resident" -H "X-Uq-AutoStart: $autostart")
+    [ -n "$name" ] && H+=(-H "X-Uq-Name: $name")
+    [ -n "$desc" ] && H+=(-H "X-Uq-Description: $desc")
+    [ -n "$args" ] && H+=(-H "X-Uq-Args: $(printf '%s' "$args" | base64 | tr -d '\n')")
+    IFS='|'
+    for cr in $crons; do
+      [ -n "$cr" ] && H+=(-H "X-Uq-Cron: $cr")
+    done
+    unset IFS
+    resp=$(curl -s --max-time 30 -X POST "${H[@]}" --data-binary @"$src" "$BASE/load")
+    echo "$resp"
+    case "$resp" in *'"ok":true'*) : ;; *) exit 1;; esac
+    ;;
+  buildpush)
+    src=""; id=""; entry=""; name=""; resident=0; autostart=0; desc=""; args=""; crons=""; nostart=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --id) id="$2"; shift 2;;
+        --entry) entry="$2"; shift 2;;
+        --name) name="$2"; shift 2;;
+        --resident) resident=1; shift;;
+        --autostart) autostart=1; shift;;
+        --desc) desc="$2"; shift 2;;
+        --args) args="$2"; shift 2;;
+        --cron) crons="$crons|$2"; shift 2;;
+        --no-start) nostart=1; shift;;
+        *) src="$1"; shift;;
+      esac
+    done
+    if [ -z "$src" ] || [ ! -f "$src" ]; then echo "usage: puppet buildpush FILE.java ..."; exit 2; fi
+    if [ ! -f "$APIJ" ]; then
+      mkdir -p "$UQD"
+      curl -s --max-time 10 "$BASE/api.jar" -o "$APIJ" || true
+    fi
+    if [ ! -f "$APIJ" ]; then echo "no api.jar (start the Puppeteer app once)"; exit 1; fi
+
+    if [ -z "$id" ]; then
+      id=$(basename "$src")
+      id="${id%.java}"; id="${id%.uq}"
+      id=$(printf '%s' "$id" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_.-' '_')
+    fi
+    if [ -z "$entry" ]; then
+      entry=$(grep -oE 'class[ ]+[A-Za-z0-9_]+[ ]+extends[ ]+UqScript' "$src" \
+              | head -1 | sed 's/class[ ]*//; s/[ ]*extends.*//')
+      if [ -z "$entry" ]; then
+        echo "cannot find 'class X extends UqScript' in $src — pass --entry"
+        exit 1
+      fi
+    fi
+    echo "buildpush: id=$id entry=$entry"
+
+    B="$UQD/build/$id"
+    rm -rf "$B"; mkdir -p "$B/classes"
+    cp "$src" "$B/$entry.java"
+    if ! javac -nowarn -source 8 -target 8 -cp "$AJ:$APIJ" -d "$B/classes" "$B/$entry.java"; then
+      echo "BUILD FAILED (javac)"
+      exit 1
+    fi
+    if ! dalvikvm -Xmx256m -cp "$DXJ" dx.dx.command.Main --dex \
+         --output="$B/out.dex" "$B/classes" 2>/dev/null; then
+      echo "BUILD FAILED (dx)"
+      exit 1
+    fi
+
+    H=(-H "Content-Type: application/octet-stream" -H "X-Uq-Id: $id" -H "X-Uq-Entry: $entry"
+       -H "X-Uq-Resident: $resident" -H "X-Uq-AutoStart: $autostart")
+    [ -n "$name" ] && H+=(-H "X-Uq-Name: $name")
+    [ -n "$desc" ] && H+=(-H "X-Uq-Description: $desc")
+    [ -n "$args" ] && H+=(-H "X-Uq-Args: $(printf '%s' "$args" | base64 | tr -d '\n')")
+    IFS='|'
+    for cr in $crons; do
+      [ -n "$cr" ] && H+=(-H "X-Uq-Cron: $cr")
+    done
+    unset IFS
+    resp=$(curl -s --max-time 30 -X POST "${H[@]}" --data-binary @"$B/out.dex" "$BASE/load")
+    echo "$resp"
+    case "$resp" in *'"ok":true'*) : ;; *) exit 1;; esac
+    if [ "$nostart" -eq 0 ]; then
+      curl -s --max-time 15 -X POST "$BASE/start?id=$id"
+      echo
+    fi
+    ;;
+  help|*)
+    usage
+    ;;
+esac
