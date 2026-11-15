@@ -261,6 +261,8 @@ public class OnePiece extends UqScript {
         } catch (Throwable ignored) {}
 
         api.log("one_piece: initialized default target chapter " + targetChapter);
+        // Persist initial state so the tracker file exists immediately on disk
+        saveTrackerState(api, targetChapter - 1, -1, -1);
     }
 
     private void saveTrackerState(ScriptApi api, int lastChapter, int week, int year) {
