@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/sh
-# UQ Shell build, stage 1 — runs inside Termux: javac + script-api.jar + dx.
+# Puppeteer build, stage 1 — runs inside Termux: javac + script-api.jar + dx.
 # (Stage 2 — aapt packaging — runs in the proot: see apk/assemble.sh.
 #  Stage 3 — apksigner — back in Termux.)
 set -e

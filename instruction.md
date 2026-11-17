@@ -8,7 +8,7 @@ Puppeteer is a split-plane Android automation and mindful focus runtime. It cons
 
 ## 1. Script Development Guide (`*.uq.java`)
 
-All custom automations, focus daemons, and system interceptors are written as single-file Java scripts located in [`examples/`](file:///home/pk/uq-shell/examples/).
+All custom automations, focus daemons, and system interceptors are written as single-file Java scripts located in [`examples/`](file:///home/pk/Apps/Puppeteer/examples/).
 
 ### Crucial Language Constraints
 > [!CAUTION]
@@ -101,7 +101,7 @@ puppet logs my_script 50
 
 ## 2. Modifying the Host APK (`apk/`)
 
-When adding new hardware integrations, Android system listeners, or updating the UI, modifications belong in [`apk/`](file:///home/pk/uq-shell/apk/).
+When adding new hardware integrations, Android system listeners, or updating the UI, modifications belong in [`apk/`](file:///home/pk/Apps/Puppeteer/apk/).
 
 ### Source Code Map
 ```
@@ -129,9 +129,9 @@ apk/
 
 ### Guide: Adding a New System API
 To expose a new Android system capability to dynamic scripts:
-1. **Declare Permissions**: Add required permissions to [`apk/AndroidManifest.xml`](file:///home/pk/uq-shell/apk/AndroidManifest.xml) and add the grant command to [`release/setup_permissions.sh`](file:///home/pk/uq-shell/release/setup_permissions.sh).
-2. **Implement in Host Service**: If it requires application context or background services, implement the logic in [`apk/src/com/usq/shell/ScriptService.java`](file:///home/pk/uq-shell/apk/src/com/usq/shell/ScriptService.java) or [`apk/src/uq/script/ScriptApi.java`](file:///home/pk/uq-shell/apk/src/uq/script/ScriptApi.java).
-3. **Expose on `ScriptApi`**: Add public methods to [`apk/src/uq/script/ScriptApi.java`](file:///home/pk/uq-shell/apk/src/uq/script/ScriptApi.java).
+1. **Declare Permissions**: Add required permissions to [`apk/AndroidManifest.xml`](file:///home/pk/Apps/Puppeteer/apk/AndroidManifest.xml) and add the grant command to [`release/setup_permissions.sh`](file:///home/pk/Apps/Puppeteer/release/setup_permissions.sh).
+2. **Implement in Host Service**: If it requires application context or background services, implement the logic in [`apk/src/com/usq/shell/ScriptService.java`](file:///home/pk/Apps/Puppeteer/apk/src/com/usq/shell/ScriptService.java) or [`apk/src/uq/script/ScriptApi.java`](file:///home/pk/Apps/Puppeteer/apk/src/uq/script/ScriptApi.java).
+3. **Expose on `ScriptApi`**: Add public methods to [`apk/src/uq/script/ScriptApi.java`](file:///home/pk/Apps/Puppeteer/apk/src/uq/script/ScriptApi.java).
 4. **Regenerate `script-api.jar`**:
    The scripts compile against `script-api.jar`. When `ScriptApi` is modified, recompile the jar or rebuild the APK so `~/.uq/api.jar` stays updated.
 
@@ -142,19 +142,19 @@ To expose a new Android system capability to dynamic scripts:
 ### Method A: Build from Source on Device (Termux + Proot)
 Puppeteer has an on-device build system that runs without a PC:
 ```bash
-cd ~/Puppeteer/apk
+cd ~/Apps/Puppeteer/apk
 bash build_all.sh
 ```
 * **Stage 1 (`build.sh`)**: Runs `javac` (targeting Java 8) and `dx` in Termux, creating `classes.dex` and `script-api.jar`.
 * **Stage 2 (`assemble.sh`)**: Uses `proot` (Ubuntu 22.04 environment) with `aapt` to package the APK against the device's native `framework-res.apk`.
-* **Stage 3 (`apksigner`)**: Signs the APK with `~/uq-shell.keystore` and outputs `uq-shell.apk` to `/storage/emulated/0/Download/`.
+* **Stage 3 (`apksigner`)**: Signs the APK with `~/puppeteer.keystore` (falls back to legacy `~/uq-shell.keystore`) and outputs `Puppeteer.apk` to `/storage/emulated/0/Download/`.
 * Install the resulting APK:
   ```bash
-  adb install -r /storage/emulated/0/Download/UQShell.apk
+  adb install -r /storage/emulated/0/Download/Puppeteer.apk
   ```
 
 ### Method B: Install Pre-Built Binary via ADB
-A signed production APK is pre-compiled and maintained in [`release/Puppeteer-v0.7.0.apk`](file:///home/pk/uq-shell/release/Puppeteer-v0.7.0.apk).
+A signed production APK is pre-compiled and maintained in [`release/Puppeteer-v0.7.0.apk`](file:///home/pk/Apps/Puppeteer/release/Puppeteer-v0.7.0.apk).
 
 1. **Install APK**:
    ```bash
@@ -183,21 +183,22 @@ A signed production APK is pre-compiled and maintained in [`release/Puppeteer-v0
 The repository is hosted at `git@github.com:pkay-1337/Puppeteer.git`.
 
 ### Termux on Phone
-- Working directory: `~/Puppeteer` (symlinked from `~/uq-shell`).
+- Working directory: `~/Apps/Puppeteer`.
+- Migrating a legacy checkout: `mkdir -p ~/Apps && mv ~/uq-shell ~/Apps/Puppeteer && rm -f ~/Puppeteer`.
 - Authenticated via SSH key at `~/.ssh/id_ed25519`.
 - Commit and push changes directly from phone:
   ```bash
-  cd ~/Puppeteer
+  cd ~/Apps/Puppeteer
   git add -A
   git commit -m "feat: Add new focus automation script"
   git push origin main
   ```
 
 ### Workstation / PC
-- Working directory: `/home/pk/Puppeteer` (or `/home/pk/uq-shell`).
+- Working directory: `/home/pk/Apps/Puppeteer`.
 - Keep in sync with phone changes:
   ```bash
-  cd /home/pk/Puppeteer
+  cd /home/pk/Apps/Puppeteer
   git pull origin main
   ```
 
@@ -205,7 +206,7 @@ The repository is hosted at `git@github.com:pkay-1337/Puppeteer.git`.
 
 ## 5. Control CLI (`puppet`) Reference
 
-The `puppet` CLI script ([`tools/puppet`](file:///home/pk/uq-shell/tools/puppet)) is installed into Termux's `$PREFIX/bin/puppet`.
+The `puppet` CLI script ([`tools/puppet`](file:///home/pk/Apps/Puppeteer/tools/puppet)) is installed into Termux's `$PREFIX/bin/puppet`.
 
 ```
 puppet status                       # Show system status, uptime, running scripts & daemons

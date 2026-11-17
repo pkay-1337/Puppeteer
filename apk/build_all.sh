@@ -13,17 +13,19 @@ cp build/apkroot/classes.dex "$ST/"
 cp -r build/apkroot/assets/* "$ST/assets/"
 rm -f "$ST/base.apk"
 
-# Update local .uq cache for usq buildpush
+# Update local .uq cache for puppet buildpush
 mkdir -p "$HOME/.uq"
 cp build/apkroot/assets/script-api.jar "$HOME/.uq/api.jar"
 
 echo "== Stage 2: aapt packaging in proot =="
-$HOME/start-ubuntu22.sh "sh /root/uq-shell/apk/assemble.sh /root/.build-uq/st"
+cp assemble.sh "$ST/"
+$HOME/start-ubuntu22.sh "sh /root/.build-uq/st/assemble.sh /root/.build-uq/st"
 
 echo "== Stage 3: apksigner in Termux =="
-KS=$HOME/uq-shell.keystore
-apksigner sign --ks "$KS" --ks-pass pass:usqkey --key-pass pass:usqkey --ks-key-alias usq --out uq-shell.apk "$ST/base.apk"
+KS=$HOME/puppeteer.keystore
+[ -f "$KS" ] || KS=$HOME/uq-shell.keystore
+apksigner sign --ks "$KS" --ks-pass pass:usqkey --key-pass pass:usqkey --ks-key-alias usq --out Puppeteer.apk "$ST/base.apk"
 
-cp uq-shell.apk /storage/emulated/0/Download/UQShell.apk
+cp Puppeteer.apk /storage/emulated/0/Download/Puppeteer.apk
 echo "== BUILD COMPLETE: v0.3.0 is ready in Downloads =="
-ls -lh uq-shell.apk /storage/emulated/0/Download/UQShell.apk
+ls -lh Puppeteer.apk /storage/emulated/0/Download/Puppeteer.apk

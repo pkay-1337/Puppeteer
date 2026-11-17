@@ -42,12 +42,12 @@ A lightweight, high-performance Android automation system and mindful focus engi
 
 | Daemon ID | Script Name | Key Capabilities |
 | :--- | :--- | :--- |
-| `blocker` | [App Blocker v3](file:///home/pk/uq-shell/examples/blocker.uq.java) | Daily cumulative limits (per-app), periodic usage nudges (5m/10m), 2-tap intentional emergency 5-min unlock passes, shared budget bus telemetry. |
-| `intent_session` | [Intent Sessions](file:///home/pk/uq-shell/examples/intent_session.uq.java) | Mindful app launch interceptor: asks for goal and duration. Pinned live floating countdown HUD (`🎯 Goal · ⏳ MM:SS`). Capped at daily remaining budget with extensions up to daily balance. |
-| `grayscale` | [Dynamic Grayscale](file:///home/pk/uq-shell/examples/grayscale.uq.java) | Hardware daltonizer switcher: instantly flips display to 100% monochrome when monitored apps are open; immediately restores color on exit. |
-| `firewall_ball` | [Firewall Ball](file:///home/pk/uq-shell/examples/firewall_ball.uq.java) | Draggable 44dp floating ball on monitored apps (🔴 Red = blocked, 🟢 Green = allowed). Single tap toggles internet access in ~5ms via local VPN blackhole. Red apps stay firewalled in background. |
-| `bedtime` | [Bedtime Firewall](file:///home/pk/uq-shell/examples/bedtime_firewall.uq.java) | 10:00 PM to 8:00 AM full-device internet blackhole with a 15-minute advance popup overlay warning at 9:45 PM. Preserves SSH access to Termux. |
-| `volnotif` | [Volume Notif](file:///home/pk/uq-shell/examples/volume_notif.uq.java) | Persistent/floating volume slider and ringer mode dialog. |
+| `blocker` | [App Blocker v3](file:///home/pk/Apps/Puppeteer/examples/blocker.uq.java) | Daily cumulative limits (per-app), periodic usage nudges (5m/10m), 2-tap intentional emergency 5-min unlock passes, shared budget bus telemetry. |
+| `intent_session` | [Intent Sessions](file:///home/pk/Apps/Puppeteer/examples/intent_session.uq.java) | Mindful app launch interceptor: asks for goal and duration. Pinned live floating countdown HUD (`🎯 Goal · ⏳ MM:SS`). Capped at daily remaining budget with extensions up to daily balance. |
+| `grayscale` | [Dynamic Grayscale](file:///home/pk/Apps/Puppeteer/examples/grayscale.uq.java) | Hardware daltonizer switcher: instantly flips display to 100% monochrome when monitored apps are open; immediately restores color on exit. |
+| `firewall_ball` | [Firewall Ball](file:///home/pk/Apps/Puppeteer/examples/firewall_ball.uq.java) | Draggable 44dp floating ball on monitored apps (🔴 Red = blocked, 🟢 Green = allowed). Single tap toggles internet access in ~5ms via local VPN blackhole. Red apps stay firewalled in background. |
+| `bedtime` | [Bedtime Firewall](file:///home/pk/Apps/Puppeteer/examples/bedtime_firewall.uq.java) | 10:00 PM to 8:00 AM full-device internet blackhole with a 15-minute advance popup overlay warning at 9:45 PM. Preserves SSH access to Termux. |
+| `volnotif` | [Volume Notif](file:///home/pk/Apps/Puppeteer/examples/volume_notif.uq.java) | Persistent/floating volume slider and ringer mode dialog. |
 
 ---
 

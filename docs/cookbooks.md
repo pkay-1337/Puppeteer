@@ -40,7 +40,7 @@ public class MyCard extends UqScript {
 
 Push as a resident script:
 ```bash
-usq buildpush MyCard.java --resident --id mycard
+puppet buildpush MyCard.java --resident --id mycard
 ```
 
 ---
@@ -94,17 +94,17 @@ Key features:
   - `friction`: Allows a one-time 5-minute emergency grace pass per app per day by typing a strict commitment phrase (*"I will stop wasting time and get to work"*).
 - **Live Countdown**: Displays hours & minutes remaining until daily quota resets at midnight.
 
-See [`examples/blocker.uq.java`](file:///home/pk/uq-shell/examples/blocker.uq.java).
+See [`examples/blocker.uq.java`](file:///home/pk/Apps/Puppeteer/examples/blocker.uq.java).
 
 ```bash
 # Push and run resident
-usq buildpush examples/blocker.uq.java --resident --id blocker --name "App Blocker"
+puppet buildpush examples/blocker.uq.java --resident --id blocker --name "App Blocker"
 
 # Check live logs
-usq logs blocker
+puppet logs blocker
 
 # Stop or remove
-usq stop blocker
+puppet stop blocker
 ```
 
 ---
@@ -113,15 +113,15 @@ usq stop blocker
 
 A clean, non-intrusive ongoing notification in the Android shade that controls device volume without any screen overlays. Tapping the notification or action buttons collapses the shade and triggers the native volume slider panel:
 
-See [`examples/volume_notif.uq.java`](file:///home/pk/uq-shell/examples/volume_notif.uq.java).
+See [`examples/volume_notif.uq.java`](file:///home/pk/Apps/Puppeteer/examples/volume_notif.uq.java).
 
 ```bash
 # Push and run resident
-usq buildpush examples/volume_notif.uq.java --resident --id volnotif --name "Volume Control"
+puppet buildpush examples/volume_notif.uq.java --resident --id volnotif --name "Volume Control"
 
 # Check live logs
-usq logs volnotif --tail 10
+puppet logs volnotif --tail 10
 
 # Stop or remove
-usq stop volnotif
+puppet stop volnotif
 ```

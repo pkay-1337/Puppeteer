@@ -1,5 +1,5 @@
 #!/bin/sh
-# UQ Shell build, stage 2 — runs in the proot.
+# Puppeteer build, stage 2 — runs in the proot.
 # Uses the device's own framework-res.apk as the resource table.
 set -e
 ST="${1:?staging dir}"
